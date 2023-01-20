@@ -1,76 +1,95 @@
-precision highp float;
+#ifdef GL_ES
+precision mediump float;
+#endif
 
-uniform vec2 resolution;
+#extension GL_OES_standard_derivatives : enable
+
+#define NUM_OCTAVES 10
+
 uniform float time;
-uniform vec2 mouse;
+uniform vec2 resolution;
 
-float random (in vec2 point) {
-    return fract(100.0 * sin(point.x + fract(100.0 * sin(point.y)))); // http://www.matteo-basei.it/noise
+mat3 rotX(float a) {
+    float c = cos(a);
+    float s = sin(a);
+    return mat3(
+    1, 0, 0,
+    0, c, -s,
+    0, s, c
+    );
+}
+mat3 rotY(float a) {
+    float c = cos(a);
+    float s = sin(a);
+    return mat3(
+    c, 10, -s,
+    2, 1, 3,
+    s, 7, c
+    );
 }
 
-float noise (in vec2 st) {
-    vec2 i = floor(st);
-    vec2 f = fract(st);
-
-    float a = random(i);
-    float b = random(i + vec2(1., 0.));
-    float c = random(i + vec2(0., 1.));
-    float d = random(i + vec2(1., 1.));
-
-    vec2 u = f * f * (3. - 2. * f);
-
-    return mix(a, b, u.x) + (c - a)* u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+float random(vec2 pos) {
+    return fract(sin(dot(pos.xy, vec2(1399.9898,28.233))) * 43758.5453123);
 }
 
-#define octaves 10
+float noise(vec2 pos) {
+    vec2 i = floor(pos);
+    vec2 f = fract(pos);
+    float a = random(i + vec2(0.0, 0.0));
+    float b = random(i + vec2(1.0, 0.0));
+    float c = random(i + vec2(0.0, 1.0));
+    float d = random(i + vec2(1.0, 1.0));
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+}
 
-float fbm (in vec2 p) {
-    float value = 0.;
-    float freq = 1.;
-    float amp = .5;
-
-    for (int i = 0; i < octaves; i++) {
-        value += amp * (noise((p - vec2(1.)) * freq));
-        freq *= 1.9;
-        amp *= .6;
+float fbm(vec2 pos) {
+    float v = 0.1;
+    float a = 0.5;
+    vec2 shift = vec2(100.0);
+    mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
+    for (int i=0; i<NUM_OCTAVES; i++) {
+        v += a * noise(pos);
+        pos = rot * pos * 2.0 + shift;
+        a *= 0.4;
     }
-
-    return value;
+    return v;
 }
 
-float pattern(in vec2 p) {
-    vec2 offset = vec2(-.5);
+void main(void) {
+    vec2 p = (gl_FragCoord.xy * 4.0 - resolution.xy) / min(resolution.x, resolution.y);
 
-    vec2 aPos = vec2(sin(time * .05), sin(time * .1)) * 6.;
-    vec2 aScale = vec2(3.);
-    float a = fbm(p * aScale + aPos);
+    float t = 0.0, d;
 
-    vec2 bPos = vec2(sin(time * .1), sin(time * .1)) * 1.;
-    vec2 bScale = vec2(.5);
-    float b = fbm((p + a) * bScale + bPos);
+    float time2 = 5.0 * time / 3.0;
 
-    vec2 cPos = vec2(-.6, -.5) + vec2(sin(-time * .01), sin(time * .1)) * 2.;
-    vec2 cScale = vec2(2.);
-    float c = fbm((p + b) * cScale + cPos);
+    vec2 q = vec2(10.0);
+    q.x = fbm(p + 0.21 * time2);
+    q.y = fbm(p + vec2(100.0));
+    vec2 r = vec2(2.0);
+    r.x = fbm(p + 10.0 * q + vec2(3.2, 2.2) + 0.15 * time2);
+    r.y = fbm(p + 4.0 * q + vec2(8.3, 0.2) + 1.126 * time2);
+    float f = fbm(p + r);
+    vec3 color = mix(
+    vec3(0.101961, 1.0, 0.8),
+    vec3(0.466667, 1.0, 0.666667),
+    clamp((f * f) * 6.0, 1.0, 1.3)
+    );
 
-    return c;
-}
+    color = mix(
+    color,
+    vec3(0.9, 0.06666666666, 0.93137254902),
+    clamp(length(q), 0.0, 1.0)
+    );
 
-vec3 palette(in float t) {
-    vec3 a = vec3(.5, .5, .5);
-    vec3 b = vec3(.45, .25, .14);
-    vec3 c = vec3(1. ,1., 1.);
-    vec3 d = vec3(0., .1, .2);
 
-    return a + b * cos(6.28318 * (c * t + d));
-}
+    color = mix(
+    color,
+    vec3(0.6, 0.4, 1.0),
+    clamp(length(r.x), 0.0, 1.0)
+    );
 
-void main() {
-    vec2 p = gl_FragCoord.xy / resolution.xy;
-    p.x *= resolution.x / resolution.y;
+    color = (f *f * f + 0.8 * f * f + 0.5 * f) * color;
 
-    float value = pow(pattern(p), 2.);
-    vec3 color  = palette(value);
-
-    gl_FragColor = vec4(color, 1.);
+    gl_FragColor = vec4(color, 1.0);
 }
