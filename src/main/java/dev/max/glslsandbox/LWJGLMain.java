@@ -89,7 +89,7 @@ public class LWJGLMain {
         GL.createCapabilities();
 
         try {
-            this.glslShader = new GLSLSandboxShader("/test_shader.fsh");
+            this.glslShader = new GLSLSandboxShader("/shader.fsh");
         } catch (IOException e) {
             // End execution
             throw new IllegalStateException(e);
